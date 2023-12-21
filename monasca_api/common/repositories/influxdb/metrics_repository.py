@@ -211,16 +211,27 @@ class MetricsRepository(metrics_repository.AbstractMetricsRepository):
     def _build_statistics_query(self, dimensions, name, tenant_id,
                                 region, start_timestamp, end_timestamp,
                                 statistics, period, offset, group_by, limit):
+        if period is None:
+            period = str(300)
+        if name:
+            measurements_query = "SHOW MEASUREMENTS"
+            meas = list(self.query_tenant_db(measurements_query,
+                                             tenant_id).get_points())
+            if "%s.%s" % (name, period) in [m['name'] for m in meas]:
+                name = '%(period)s"."%(name)s.%(period)s' % \
+                       {"period": period, "name": name}
+                is_real_time = False
+            else:
+                is_real_time = True
 
         from_clause = self._build_from_clause(dimensions, name, tenant_id,
                                               region, start_timestamp,
                                               end_timestamp)
-        if period is None:
-            period = str(300)
 
         if offset:
             if '_' in offset:
-                tmp = datetime.strptime(str(offset).split('_')[1], "%Y-%m-%dT%H:%M:%SZ")
+                tmp = datetime.strptime(str(offset).split('_')[1],
+                                        "%Y-%m-%dT%H:%M:%SZ")
                 tmp = tmp + timedelta(seconds=int(period))
                 # Leave out any ID as influx doesn't understand it
                 offset = tmp.isoformat()
@@ -233,16 +244,16 @@ class MetricsRepository(metrics_repository.AbstractMetricsRepository):
 
         statistics = [statistic.replace('avg', 'mean') for statistic in
                       statistics]
-        statistics = [statistic + '(value)' for statistic in statistics]
-
+        if is_real_time:
+            statistics = [statistic + '(value)' for statistic in statistics]
+        else:
+            statistics = [statistic + '(' + statistic + ')'
+                          for statistic in statistics]
         statistic_string = ",".join(statistics)
-
         query = 'select ' + statistic_string + ' ' + from_clause
 
         query += self._build_group_by_clause(group_by, period)
-
         limit_clause = self._build_limit_clause(limit)
-
         query += limit_clause
 
         return query
@@ -274,7 +285,7 @@ class MetricsRepository(metrics_repository.AbstractMetricsRepository):
                 clean_dimension_name = dimension_name.replace("\'", "\\'") if PY3 \
                     else dimension_name.replace("\'", "\\'").encode('utf-8')
                 if dimension_value == "":
-                    where_clause += " and \"{}\" =~ /.+/".format(
+                    where_clause += " and \"{}\" = ''".format(
                         clean_dimension_name)
                 elif '|' in dimension_value:
                     # replace ' with \' to make query parsable

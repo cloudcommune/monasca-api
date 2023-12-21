@@ -1121,9 +1121,7 @@ function install_monasca_agent {
         sudo chown $STACK_USER:monasca /opt/monasca-agent
 
         if python3_enabled; then
-            (cd /opt/monasca-agent ;
-            virtualenv -p python3 . ;
-            bin/python3 -m pip install --upgrade pip==20.2.3)
+            (cd /opt/monasca-agent ; virtualenv -p python3 .)
             sudo rm -rf /opt/stack/monasca-common/.eggs/
         else
             (cd /opt/monasca-agent ; virtualenv .)
@@ -1220,9 +1218,8 @@ function clean_monasca_agent {
 function install_nodejs {
 
     echo_summary "Install Node.js"
-    curl -sL https://deb.nodesource.com/setup_10.x | sudo bash -
 
-    apt_get install nodejs
+    apt_get install nodejs npm
     npm config set registry "http://registry.npmjs.org/"; \
     npm config set proxy "${HTTP_PROXY}"; \
     npm set strict-ssl false;
@@ -1248,7 +1245,8 @@ function install_monasca_grafana {
         git_timed clone $GRAFANA_REPO $GRAFANA_DIR --branch $GRAFANA_BRANCH --depth 1
     fi
 
-    npm config set python /usr/bin/python3
+    # Is required to use python2.7 to build grafana because node-gyp support only python2
+    npm config set python /usr/bin/python2.7
 
     cd "${MONASCA_BASE}"
 
